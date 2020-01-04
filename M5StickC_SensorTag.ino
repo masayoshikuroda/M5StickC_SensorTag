@@ -143,10 +143,11 @@ class ServerCallbacks: public BLEServerCallbacks {
     }
     void onConnect(BLEServer* pServer) {
       *_pConnected = true;
-      M5.Lcd.fillScreen(BLACK);
-      M5.Lcd.setCursor(0, 0);
       M5.Lcd.println("ServerCallbacks onConnect");
       Serial.println("ServerCallbacks onConnect");
+      M5.Lcd.fillScreen(BLACK);
+      M5.Lcd.setTextSize(1);
+      M5.Lcd.setCursor(0, 0);
     }
     void onDisconnect(BLEServer* pServer) {
       *_pConnected = false;
@@ -272,10 +273,6 @@ public:
   bool elapsed(int msecInterval) {
     int current = millis();
     bool ret = (current - this->lastUpdate) > msecInterval;
-    Serial.print(current);
-    Serial.print(" - ");Serial.print(this->lastUpdate);
-    Serial.print(" > ");Serial.print(msecInterval);
-    Serial.print(" = ");Serial.println(ret);
     return ret;
   }
   void setValue(uint8_t* data, size_t size) {
@@ -458,11 +455,11 @@ BLEService* createIOService(BLEServer* pServer, bool useLED, bool useSpeaker) {
   return pService;
 }
 
-bool isDHT12 = true;
-bool isBME280 = true;
-bool isBMM150 = true;
-bool isIMU = false;
-bool isLED = false;
+bool isDHT12 = false;
+bool isBME280 = false;
+bool isBMM150 = false;
+bool isIMU = true;
+bool isLED = true;
 bool isSpeaker = false;
 
 bool deviceConnected = false;
@@ -479,9 +476,8 @@ PeriodCharacteristic* pBarometerPeriod         = NULL;
 
 void setup() {
   M5.begin();
-  Wire.begin(0,26);
   
-  M5.Lcd.setRotation(1);
+  M5.Lcd.setRotation(3);
   M5.Lcd.fillScreen(BLACK);
   M5.Lcd.setTextSize(1);
   M5.Lcd.setCursor(0, 0);
@@ -489,6 +485,10 @@ void setup() {
   M5.Lcd.println("enter setup");
   Serial.println("enter setup");
 
+  if (isBME280 || isBMM150 || isDHT12) {
+    Wire.begin(0,26);
+  }
+  
   if (isBME280) {
     while (!bme.begin(0x76)){  
       Serial.println("Could not find a valid BMP280 sensor, check wiring!");
@@ -588,16 +588,21 @@ void setup() {
 }
 
 void loop() {
-  uint8_t batt_warn = M5.Axp.GetWarningLevel();
-  Serial.print("Bat Warn: "); Serial.println(batt_warn);
+  M5.Lcd.setCursor(0, 0);
+  
   float bat_power = M5.Axp.GetBatVoltage();
-  Serial.print("Batt Power[%]: "); Serial.println(bat_power);
+  Serial.printf("Batt Power[V]: %1.2f\r\n", bat_power);
+  M5.Lcd.printf("Batt Power[V]: %1.2f\r\n", bat_power);
   pBatteryLevelCharacteristic->setValue(bat_power);
-    
+
+  pSimpleKeysCharacteristic->notify();
+  
   if (isDHT12) {
     DHT12ReadData();
-    Serial.printf("Temperatura: %2.2f*C  Humedad: %0.2f%%\r\n", dht12Temperature, dht12Humidity);
-    M5.Lcd.printf("Temperatura: %2.2f*C  Humedad: %0.2f%%\r\n", dht12Temperature, dht12Humidity);
+    Serial.printf("Temperature[degC]: %2.2f\r\n", dht12Temperature);
+    M5.Lcd.printf("Temperature[degC]: %2.2f\r\n", dht12Temperature);
+    Serial.printf("Humidity[%%]:      %0.2f\r\n", dht12Humidity);
+    M5.Lcd.printf("Humidity[%%]:      %0.2f\r\n", dht12Humidity);
        
     if ((pTemperatureData != NULL) && (pTemperatureData->elapsed(pTemperaturePeriod->getPeriod()*10) > 0)) {
       uint16_t value = (int)(dht12Temperature / 0.03125) << 2;
@@ -615,8 +620,8 @@ void loop() {
 
   if (isBME280) {
     BMP280ReadData();
-    Serial.printf("Pressure: %0.2fPa\r\n", bmePressure);
-    M5.Lcd.printf("Pressure: %0.2fPa\r\n", bmePressure);
+    Serial.printf("Pressure[Pa]: %0.2f\r\n", bmePressure);
+    M5.Lcd.printf("Pressure[Pa]: %0.2f\r\n", bmePressure);
      
     if ((pBarometerData != NULL) && (pBarometerData->elapsed(pBarometerPeriod->getPeriod()*10) > 0)) {
       uint32_t tInt = dht12Temperature*100;
@@ -637,11 +642,15 @@ void loop() {
 
   if (isIMU) {
     MPU6886ReadData();
-    Serial.printf("Acc-Gyro-Temp: %5.2f  %5.2f  %5.2f - %6.2f  %6.2f  %6.2f - %.2f\r\n", accX,accY,accZ,gyroX,gyroY,gyroZ,imuTemp);
+    Serial.printf("A: %5.1f  %5.1f  %5.1f\r\n", accX,accY,accZ);
+    M5.Lcd.printf("A: %5.1f  %5.1f  %5.1f\r\n", accX,accY,accZ);
+    Serial.printf("G: %5.1f  %5.1f  %5.1f\r\n", gyroX,gyroY,gyroZ);
+    M5.Lcd.printf("G: %5.1f  %5.1f  %5.1f\r\n", gyroX,gyroY,gyroZ);
   }
   if (isBMM150) {
     BMM150ReadData();
-    Serial.printf("Mag: %5.2f  %5.2f  %5.2f\r\n", magX,magY,magZ);
+    Serial.printf("M: %5.1f  %5.1f  %5.1f\r\n", magX,magY,magZ);
+    M5.Lcd.printf("M: %5.1f  %5.1f  %5.1f\r\n", magX,magY,magZ);
   }
 
   if ((pMovementData != NULL) && pMovementData->elapsed(pMovementPeriod->getPeriod()*10)) {
